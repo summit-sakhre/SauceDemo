@@ -5,8 +5,10 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+
+  #minute hour day-of-month month day-of-week
   schedule:
-    - cron: '0 2 * * *'   # run full suite nightly at 2 AM UTC
+    - cron: '0 2 1,15 * *'   # run full suite nightly at 2 AM UTC, 
 
 jobs:
   quick-tests:
