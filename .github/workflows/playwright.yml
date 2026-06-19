@@ -1,12 +1,15 @@
 name: Playwright Tests
+
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  schedule:
+    - cron: '0 2 * * *'   # run full suite nightly at 2 AM UTC
 
 jobs:
-  test:
+  quick-tests:
     timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
@@ -29,8 +32,15 @@ jobs:
     - name: Install Playwright Browsers
       run: npx playwright install --with-deps
 
-    - name: Run Playwright tests
-      run: npx playwright test
+    - name: Run only changed test files
+      run: |
+        CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^tests/.*\.spec\.js$' || true)
+        if [ -n "$CHANGED" ]; then
+          echo "Running changed tests: $CHANGED"
+          npx playwright test $CHANGED
+        else
+          echo "No test files changed, skipping Playwright tests."
+        fi
 
     - name: Upload Playwright report
       if: ${{ !cancelled() }}
@@ -45,6 +55,50 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: playwright-artifacts
+        path: |
+          test-results/
+          traces/
+
+  full-suite:
+    timeout-minutes: 300   # allow longer time for full run
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 24
+
+    - uses: actions/cache@v4
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Install Playwright Browsers
+      run: npx playwright install --with-deps
+
+    - name: Run full Playwright suite
+      run: npx playwright test
+
+    - name: Upload Playwright report
+      if: ${{ !cancelled() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: playwright-report-full
+        path: playwright-report/
+        retention-days: 30
+
+    - name: Upload Playwright artifacts (on failure)
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: playwright-artifacts-full
         path: |
           test-results/
           traces/
