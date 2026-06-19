@@ -22,7 +22,7 @@ export default defineConfig({
       use: {
         baseURL: 'https://www.saucedemo.com/',
         browserName: 'chromium',
-        headless: false,
+        headless: true,
         screenshot: 'only-on-failure',
         trace: 'retain-on-failure',
         testDataFile: 'utils/testData.json'
@@ -30,9 +30,9 @@ export default defineConfig({
     }, {
       name: 'prod',
       use: {
-        baseURL: 'https://www.google.com/',
+        baseURL: 'https://www.saucedemo.com/',
         browserName: 'firefox',
-        headless: false,
+        headless: true,
         screenshot: 'only-on-failure',
         trace: 'retain-on-failure',
         testDataFile: 'utils/testData.json'
