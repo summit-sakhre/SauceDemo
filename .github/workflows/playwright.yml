@@ -16,6 +16,9 @@ jobs:
   quick-tests:
     timeout-minutes: 60
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: [stage, prod]  
     steps:
     - uses: actions/checkout@v4
 
@@ -36,27 +39,32 @@ jobs:
     - name: Install Playwright Browsers
       run: npx playwright install --with-deps
 
-    - name: Run Playwright tests
+    - name: Detect changed files
+      id: changes
       run: |
         CHANGED=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} || true)
         NEWFILES=$(echo "$CHANGED" | grep '^A' | grep 'tests/.*\.spec\.js$' | cut -f2 || true)
         MODIFIED=$(echo "$CHANGED" | grep '^M' | grep 'tests/.*\.spec\.js$' | cut -f2 || true)
         CONFIGFILES=$(echo "$CHANGED" | grep 'playwright.config' || true)
 
-        if [ -n "$CONFIGFILES" ]; then
-          echo "Config file changed, running sanity + full suite"
+        echo "newfiles=$NEWFILES" >> $GITHUB_OUTPUT
+        echo "modified=$MODIFIED" >> $GITHUB_OUTPUT
+        echo "configfiles=$CONFIGFILES" >> $GITHUB_OUTPUT
+
+    - name: Run Playwright tests
+      run: |
+        if [ -n "${{ steps.changes.outputs.configfiles }}" ]; then
+          echo "Config file changed → run sanity + full suite"
           npm run sanity
-          npx playwright test
-        elif [ -n "$NEWFILES" ]; then
-          echo "New test file(s) added: $NEWFILES"
-          echo "Running sanity + new test files"
+          npx playwright test --project=${{ matrix.project }}
+        elif [ -n "${{ steps.changes.outputs.newfiles }}" ]; then
+          echo "New test file(s): ${{ steps.changes.outputs.newfiles }}"
           npm run sanity
-          npx playwright test $NEWFILES
-        elif [ -n "$MODIFIED" ]; then
-          echo "Modified test files: $MODIFIED"
-          echo "Running sanity + modified test files"
+          npx playwright test --project=${{ matrix.project }} ${{ steps.changes.outputs.newfiles }}
+        elif [ -n "${{ steps.changes.outputs.modified }}" ]; then
+          echo "Modified test file(s): ${{ steps.changes.outputs.modified }}"
           npm run sanity
-          npx playwright test $MODIFIED
+          npx playwright test --project=${{ matrix.project }} ${{ steps.changes.outputs.modified }}
         else
           echo "No relevant changes, skipping Playwright tests."
         fi
