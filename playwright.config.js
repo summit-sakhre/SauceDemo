@@ -30,7 +30,7 @@ export default defineConfig({
     }, {
       name: 'prod',
       use: {
-        baseURL: 'https://www.saucedemo.com/',
+        baseURL: 'https://www.google.com/',
         browserName: 'firefox',
         headless: true,
         screenshot: 'only-on-failure',
