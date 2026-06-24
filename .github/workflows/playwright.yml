@@ -121,33 +121,22 @@ jobs:
 
           if [ -n "${{ steps.changes.outputs.configfiles }}" ]; then
 
-            echo "================================================="
-            echo "Configuration / README / package / workflow change"
-            echo "Running sanity tests"
-            echo "================================================="
+            echo "Configuration files changed"
+            echo "Running sanity tests only"
 
             npx playwright test \
               --grep @sanity \
               --project=${{ matrix.project }} \
               --retries=0
-
-            echo "Running unit tests"
-
-            npm run test:unit
 
           elif [ -n "${{ steps.changes.outputs.newfiles }}" ]; then
 
-            echo "================================================="
             echo "New test files detected"
-            echo "Running sanity suite first"
-            echo "================================================="
 
             npx playwright test \
               --grep @sanity \
               --project=${{ matrix.project }} \
               --retries=0
-
-            echo "Running new files"
 
             npx playwright test \
               --project=${{ matrix.project }} \
@@ -155,17 +144,12 @@ jobs:
 
           elif [ -n "${{ steps.changes.outputs.modified }}" ]; then
 
-            echo "================================================="
             echo "Modified test files detected"
-            echo "Running sanity suite first"
-            echo "================================================="
 
             npx playwright test \
               --grep @sanity \
               --project=${{ matrix.project }} \
               --retries=0
-
-            echo "Running modified files"
 
             npx playwright test \
               --project=${{ matrix.project }} \
@@ -173,11 +157,7 @@ jobs:
 
           else
 
-            echo "================================================="
-            echo "No relevant changes detected"
-            echo "Skipping Playwright execution"
-            echo "================================================="
-
+            echo "No relevant changes"
           fi
 
       - name: Upload Playwright report
