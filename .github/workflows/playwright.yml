@@ -1,38 +1,204 @@
-name: Playwright CI
+name: Playwright Tests
 
 on:
+  push:
+    branches:
+      - '**'
+
   pull_request:
-    branches: [ main ]
+    branches:
+      - '**'
+
+  schedule:
+    # 2 AM UTC on 1st and 15th
+    - cron: '0 2 1,15 * *'
+
 
 jobs:
 
+  # =========================
+  # STAGE TESTS (PR GATING)
+  # =========================
   stage-tests:
+
     name: Playwright Stage Tests
+    if: github.event_name != 'schedule'
+
+    timeout-minutes: 60
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 24
 
-      - run: npm ci
-      - run: npx playwright install
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
-      - run: npx playwright test --project=stage
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install
+
+      - name: Detect changed files
+        id: changes
+        shell: bash
+        run: |
+          echo "Event: ${{ github.event_name }}"
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+            HEAD_SHA="${{ github.sha }}"
+          fi
+
+          CHANGED=$(git diff --name-status "$BASE_SHA" "$HEAD_SHA" || true)
+
+          echo "$CHANGED"
+
+          NEWFILES=$(echo "$CHANGED" | grep '^A' | grep 'tests/.*\.spec\.[jt]s$' | cut -f2 || true)
+          MODIFIED=$(echo "$CHANGED" | grep '^M' | grep 'tests/.*\.spec\.[jt]s$' | cut -f2 || true)
+
+          CONFIGFILES=$(echo "$CHANGED" | grep -E 'README\.md$|package\.json$|package-lock\.json$|playwright\.config|\.github/workflows/.*\.ya?ml$' || true)
+
+          echo "newfiles=$NEWFILES" >> $GITHUB_OUTPUT
+          echo "modified=$MODIFIED" >> $GITHUB_OUTPUT
+          echo "configfiles<<EOF" >> $GITHUB_OUTPUT
+          echo "$CONFIGFILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Run Stage Tests
+        shell: bash
+        run: |
+
+          if [ -n "${{ steps.changes.outputs.configfiles }}" ]; then
+            echo "Config change → running sanity only"
+            npx playwright test --grep @sanity --project=stage --retries=0
+
+          elif [ -n "${{ steps.changes.outputs.newfiles }}" ]; then
+            echo "New test files"
+            npx playwright test --grep @sanity --project=stage --retries=0
+            npx playwright test --project=stage ${{ steps.changes.outputs.newfiles }}
+
+          elif [ -n "${{ steps.changes.outputs.modified }}" ]; then
+            echo "Modified test files"
+            npx playwright test --grep @sanity --project=stage --retries=0
+            npx playwright test --project=stage ${{ steps.changes.outputs.modified }}
+
+          else
+            echo "No relevant changes → running sanity only"
+            npx playwright test --grep @sanity --project=stage
+          fi
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-stage
+          path: playwright-report/
+          retention-days: 30
 
 
+  # =========================
+  # PROD TESTS (GATE MERGE)
+  # =========================
   prod-tests:
+
     name: Playwright Prod Tests
+    if: github.event_name != 'schedule'
+
+    timeout-minutes: 60
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 24
 
-      - run: npm ci
-      - run: npx playwright install
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
-      - run: npx playwright test --project=prod
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install
+
+      - name: Run Prod Tests
+        run: npx playwright test --project=prod
+
+
+  # =========================
+  # FULL SUITE (SCHEDULE ONLY)
+  # =========================
+  full-suite:
+
+    name: Playwright Full Suite
+    if: github.event_name == 'schedule'
+
+    timeout-minutes: 300
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [stage, prod]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run full suite
+        run: npx playwright test --project=${{ matrix.project }}
+
+      - name: Upload report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-full-${{ matrix.project }}
+          path: playwright-report/
+          retention-days: 30
