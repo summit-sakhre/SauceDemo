@@ -13,20 +13,18 @@ on:
     # 2 AM UTC on 1st and 15th
     - cron: '0 2 1,15 * *'
 
+
 jobs:
-  quick-tests:
+
+  # =========================
+  # STAGE TESTS (PR GATING)
+  # =========================
+  stage-tests:
+
+    name: Playwright Stage Tests
     if: github.event_name != 'schedule'
 
     timeout-minutes: 60
-
-    runs-on: ubuntu-latest
-
-  stage-tests:
-    name: Playwright Stage Tests
-    runs-on: ubuntu-latest
-
-  prod-tests:
-    name: Playwright Prod Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -52,13 +50,12 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps
+        run: npx playwright install
 
       - name: Detect changed files
         id: changes
         shell: bash
         run: |
-
           echo "Event: ${{ github.event_name }}"
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -69,35 +66,14 @@ jobs:
             HEAD_SHA="${{ github.sha }}"
           fi
 
-          echo "Base SHA: $BASE_SHA"
-          echo "Head SHA: $HEAD_SHA"
-
           CHANGED=$(git diff --name-status "$BASE_SHA" "$HEAD_SHA" || true)
 
-          echo "Changed files:"
           echo "$CHANGED"
 
-          NEWFILES=$(
-            echo "$CHANGED" \
-            | grep '^A' \
-            | grep 'tests/.*\.spec\.[jt]s$' \
-            | cut -f2 \
-            | tr '\n' ' ' || true
-          )
+          NEWFILES=$(echo "$CHANGED" | grep '^A' | grep 'tests/.*\.spec\.[jt]s$' | cut -f2 || true)
+          MODIFIED=$(echo "$CHANGED" | grep '^M' | grep 'tests/.*\.spec\.[jt]s$' | cut -f2 || true)
 
-          MODIFIED=$(
-            echo "$CHANGED" \
-            | grep '^M' \
-            | grep 'tests/.*\.spec\.[jt]s$' \
-            | cut -f2 \
-            | tr '\n' ' ' || true
-          )
-
-          CONFIGFILES=$(
-            echo "$CHANGED" \
-            | grep -E 'README\.md$|package\.json$|package-lock\.json$|playwright\.config|\.github/workflows/.*\.ya?ml$' \
-            || true
-          )
+          CONFIGFILES=$(echo "$CHANGED" | grep -E 'README\.md$|package\.json$|package-lock\.json$|playwright\.config|\.github/workflows/.*\.ya?ml$' || true)
 
           echo "newfiles=$NEWFILES" >> $GITHUB_OUTPUT
           echo "modified=$MODIFIED" >> $GITHUB_OUTPUT
@@ -105,93 +81,93 @@ jobs:
           echo "$CONFIGFILES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Show detected changes
-        run: |
-          echo "New Files:"
-          echo "${{ steps.changes.outputs.newfiles }}"
-
-          echo "Modified Files:"
-          echo "${{ steps.changes.outputs.modified }}"
-
-          echo "Config Files:"
-          echo "${{ steps.changes.outputs.configfiles }}"
-
-      - name: Execute tests
+      - name: Run Stage Tests
         shell: bash
         run: |
 
           if [ -n "${{ steps.changes.outputs.configfiles }}" ]; then
-
-            echo "Configuration files changed"
-            echo "Running sanity tests only"
-
-            npx playwright test \
-              --grep @sanity \
-              --project=${{ matrix.project }} \
-              --retries=0
+            echo "Config change → running sanity only"
+            npx playwright test --grep @sanity --project=stage --retries=0
 
           elif [ -n "${{ steps.changes.outputs.newfiles }}" ]; then
-
-            echo "New test files detected"
-
-            npx playwright test \
-              --grep @sanity \
-              --project=${{ matrix.project }} \
-              --retries=0
-
-            npx playwright test \
-              --project=${{ matrix.project }} \
-              ${{ steps.changes.outputs.newfiles }}
+            echo "New test files"
+            npx playwright test --grep @sanity --project=stage --retries=0
+            npx playwright test --project=stage ${{ steps.changes.outputs.newfiles }}
 
           elif [ -n "${{ steps.changes.outputs.modified }}" ]; then
-
-            echo "Modified test files detected"
-
-            npx playwright test \
-              --grep @sanity \
-              --project=${{ matrix.project }} \
-              --retries=0
-
-            npx playwright test \
-              --project=${{ matrix.project }} \
-              ${{ steps.changes.outputs.modified }}
+            echo "Modified test files"
+            npx playwright test --grep @sanity --project=stage --retries=0
+            npx playwright test --project=stage ${{ steps.changes.outputs.modified }}
 
           else
-
-            echo "No relevant changes"
+            echo "No relevant changes → running sanity only"
+            npx playwright test --grep @sanity --project=stage
           fi
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.project }}
+          name: playwright-report-stage
           path: playwright-report/
           retention-days: 30
 
-      - name: Upload Playwright artifacts
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-artifacts-${{ matrix.project }}
-          path: |
-            test-results/
-            traces/
-          retention-days: 30
 
+  # =========================
+  # PROD TESTS (GATE MERGE)
+  # =========================
+  prod-tests:
+
+    name: Playwright Prod Tests
+    if: github.event_name != 'schedule'
+
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install
+
+      - name: Run Prod Tests
+        run: npx playwright test --project=prod
+
+
+  # =========================
+  # FULL SUITE (SCHEDULE ONLY)
+  # =========================
   full-suite:
+
+    name: Playwright Full Suite
     if: github.event_name == 'schedule'
 
     timeout-minutes: 300
-
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
       matrix:
-        project:
-          - stage
-          - prod
+        project: [stage, prod]
 
     steps:
       - name: Checkout code
@@ -217,23 +193,12 @@ jobs:
         run: npx playwright install --with-deps
 
       - name: Run full suite
-        run: |
-          npx playwright test --project=${{ matrix.project }}
+        run: npx playwright test --project=${{ matrix.project }}
 
-      - name: Upload Playwright report
+      - name: Upload report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-full-${{ matrix.project }}
           path: playwright-report/
-          retention-days: 30
-
-      - name: Upload Playwright artifacts
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-artifacts-full-${{ matrix.project }}
-          path: |
-            test-results/
-            traces/
           retention-days: 30
