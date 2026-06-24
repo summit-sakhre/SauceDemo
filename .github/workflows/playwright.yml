@@ -55,15 +55,17 @@ jobs:
       run: |
         if [ -n "${{ steps.changes.outputs.configfiles }}" ]; then
           echo "Config file changed → run sanity + full suite"
-          npm run sanity
+          npx playwright test --grep @sanity --project=${{ matrix.project }}
           npx playwright test --project=${{ matrix.project }}
         elif [ -n "${{ steps.changes.outputs.newfiles }}" ]; then
           echo "New test file(s): ${{ steps.changes.outputs.newfiles }}"
-          npm run sanity
+          echo "Running sanity + new test files"
+          npx playwright test --grep @sanity --project=${{ matrix.project }}
           npx playwright test --project=${{ matrix.project }} ${{ steps.changes.outputs.newfiles }}
         elif [ -n "${{ steps.changes.outputs.modified }}" ]; then
           echo "Modified test file(s): ${{ steps.changes.outputs.modified }}"
-          npm run sanity
+          echo "Running sanity + modified test files"
+          npx playwright test --grep @sanity --project=${{ matrix.project }}
           npx playwright test --project=${{ matrix.project }} ${{ steps.changes.outputs.modified }}
         else
           echo "No relevant changes, skipping Playwright tests."
