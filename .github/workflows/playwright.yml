@@ -76,22 +76,27 @@ jobs:
           echo "Changed files:"
           echo "$CHANGED"
 
-          NEWFILES=$(echo "$CHANGED" \
+          NEWFILES=$(
+            echo "$CHANGED" \
             | grep '^A' \
             | grep 'tests/.*\.spec\.[jt]s$' \
             | cut -f2 \
-            | tr '\n' ' ')
+            | tr '\n' ' ' || true
+          )
 
-          MODIFIED=$(echo "$CHANGED" \
+          MODIFIED=$(
+            echo "$CHANGED" \
             | grep '^M' \
             | grep 'tests/.*\.spec\.[jt]s$' \
             | cut -f2 \
-            | tr '\n' ' ')
+            | tr '\n' ' ' || true
+          )
 
-          CONFIGFILES=$(echo "$CHANGED" \
-            | grep -E \
-            'README\.md$|package\.json$|package-lock\.json$|playwright\.config|\.github/workflows/.*\.ya?ml$' \
-            || true)
+          CONFIGFILES=$(
+            echo "$CHANGED" \
+            | grep -E 'README\.md$|package\.json$|package-lock\.json$|playwright\.config|\.github/workflows/.*\.ya?ml$' \
+            || true
+          )
 
           echo "newfiles=$NEWFILES" >> $GITHUB_OUTPUT
           echo "modified=$MODIFIED" >> $GITHUB_OUTPUT
