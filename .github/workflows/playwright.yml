@@ -21,12 +21,13 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    strategy:
-      fail-fast: false
-      matrix:
-        project:
-          - stage
-          - prod
+  stage-tests:
+    name: Playwright Stage Tests
+    runs-on: ubuntu-latest
+
+  prod-tests:
+    name: Playwright Prod Tests
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
