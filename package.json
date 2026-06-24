@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "stage": "npx playwright test tests/sauceDemoPageObject.spec.js --project=stage",
-    "prod": "npx playwright test tests/sauceDemoPageObject.spec.js --project=prod"
+    "prod": "npx playwright test tests/sauceDemoPageObject.spec.js --project=prod",
+    "sanity": "npx playwright test --grep @sanity"
   },
   "keywords": [],
   "author": "",

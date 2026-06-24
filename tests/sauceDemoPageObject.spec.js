@@ -8,7 +8,7 @@ test.beforeEach(async ({ }, testInfo) => {
     dataSet = JSON.parse(JSON.stringify(require(`../${testDataFile}`)))
 })
 
-test('Sauce Demo Practice', async ({ page }) => {
+test('@Sanity Sauce Demo Practice', async ({ page }) => {
 
     const POManager = new PageObjectManager(page)
     const login = POManager.getLogin()

@@ -36,14 +36,29 @@ jobs:
     - name: Install Playwright Browsers
       run: npx playwright install --with-deps
 
-    - name: Run only changed test files
+    - name: Run Playwright tests
       run: |
-        CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^tests/.*\.spec\.js$' || true)
-        if [ -n "$CHANGED" ]; then
-          echo "Running changed tests: $CHANGED"
-          npx playwright test $CHANGED
+        CHANGED=$(git diff --name-status ${{ github.event.before }} ${{ github.sha }} || true)
+        NEWFILES=$(echo "$CHANGED" | grep '^A' | grep 'tests/.*\.spec\.js$' | cut -f2 || true)
+        MODIFIED=$(echo "$CHANGED" | grep '^M' | grep 'tests/.*\.spec\.js$' | cut -f2 || true)
+        CONFIGFILES=$(echo "$CHANGED" | grep 'playwright.config' || true)
+
+        if [ -n "$CONFIGFILES" ]; then
+          echo "Config file changed, running sanity + full suite"
+          npm run sanity
+          npx playwright test
+        elif [ -n "$NEWFILES" ]; then
+          echo "New test file(s) added: $NEWFILES"
+          echo "Running sanity + new test files"
+          npm run sanity
+          npx playwright test $NEWFILES
+        elif [ -n "$MODIFIED" ]; then
+          echo "Modified test files: $MODIFIED"
+          echo "Running sanity + modified test files"
+          npm run sanity
+          npx playwright test $MODIFIED
         else
-          echo "No test files changed, skipping Playwright tests."
+          echo "No relevant changes, skipping Playwright tests."
         fi
 
     - name: Upload Playwright report
