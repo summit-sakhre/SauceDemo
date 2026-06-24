@@ -1,18 +1,38 @@
-name: Check Registration Fix
+name: Playwright CI
 
 on:
   pull_request:
     branches: [ main ]
 
 jobs:
+
   stage-tests:
     name: Playwright Stage Tests
     runs-on: ubuntu-latest
+
     steps:
-      - run: echo "stage"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - run: npm ci
+      - run: npx playwright install
+
+      - run: npx playwright test --project=stage
+
 
   prod-tests:
     name: Playwright Prod Tests
     runs-on: ubuntu-latest
+
     steps:
-      - run: echo "prod"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - run: npm ci
+      - run: npx playwright install
+
+      - run: npx playwright test --project=prod
